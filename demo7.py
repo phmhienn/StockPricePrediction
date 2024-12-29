@@ -65,8 +65,8 @@ df1.drop('Date', axis=1, inplace=True)
 
 # Chia tập dữ liệu thành tập huấn luyện và tập kiểm tra
 data = df1.values
-train_data = data[:1500]
-test_data = data[1500:]
+train_data = data[:1700]  # Tăng kích thước tập huấn luyện
+test_data = data[1700:]
 
 # Chuẩn hóa dữ liệu
 sc = MinMaxScaler(feature_range=(0, 1))
@@ -90,8 +90,9 @@ model = Sequential()  # Tạo lớp mạng cho dữ liệu đầu vào
 
 # 2 lớp LSTM
 model.add(LSTM(units=128, input_shape=(x_train.shape[1], 1), return_sequences=True))
+model.add(Dropout(0.6))  # Tăng giá trị Dropout để giảm overfitting
 model.add(LSTM(units=64))
-model.add(Dropout(0.5))  # Loại bỏ 1 số đơn vị tránh học tủ (overfitting)
+model.add(Dropout(0.6))  # Tăng giá trị Dropout thêm
 model.add(Dense(1))  # Output đầu ra 1 chiều
 
 # Đo sai số tuyệt đối trung bình có sử dụng trình tối ưu hóa adam
@@ -102,11 +103,14 @@ save_model = "save_model.keras"
 best_model = ModelCheckpoint(save_model, monitor='loss', verbose=2, save_best_only=True, mode='auto')
 model.fit(x_train, y_train, epochs=100, batch_size=50, verbose=2, callbacks=[best_model])
 
-# Dữ liệu train
-y_train = sc.inverse_transform(y_train.reshape(-1, 1))  # Giá thực
+# Thêm dự đoán vào tập dữ liệu huấn luyện
 final_model = load_model("save_model.keras")
 y_train_predict = final_model.predict(x_train)  # Dự đoán giá đóng cửa trên tập đã train
 y_train_predict = sc.inverse_transform(y_train_predict)  # Giá dự đoán
+y_train = sc.inverse_transform(y_train.reshape(-1, 1))  # Giá thực
+
+train_data1 = df1[50:1700]  # Cập nhật kích thước của train_data1
+train_data1['Dự đoán'] = y_train_predict  # Thêm dữ liệu dự đoán vào tập huấn luyện
 
 # Xử lý dữ liệu test
 test = df1[len(train_data)-50:].values
@@ -120,19 +124,16 @@ x_test = np.array(x_test)
 x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
 
 # Dữ liệu test
-y_test = data[1500:]  # Giá thực
+y_test = data[1700:]  # Giá thực
 y_test_predict = final_model.predict(x_test)
 y_test_predict = sc.inverse_transform(y_test_predict)  # Giá dự đoán
 
-# Lập biểu đồ so sánh
-train_data1 = df1[50:1500]
-test_data1 = df1[1500:]
+test_data1 = df1[1700:]
+test_data1['Dự đoán'] = y_test_predict  # Thêm dữ liệu dự đoán vào tập kiểm tra
 
 plt.figure(figsize=(24, 8))
 plt.plot(df1, label='Giá thực tế', color='red')  # Đường giá thực
-train_data1['Dự đoán'] = y_train_predict  # Thêm dữ liệu
 plt.plot(train_data1['Dự đoán'], label='Giá dự đoán train', color='green')  # Đường giá dự báo train
-test_data1['Dự đoán'] = y_test_predict  # Thêm dữ liệu
 plt.plot(test_data1['Dự đoán'], label='Giá dự đoán test', color='blue')  # Đường giá dự báo test
 plt.title('So sánh giá dự báo và giá thực tế')  # Đặt tên biểu đồ
 plt.xlabel('Thời gian')  # Đặt tên hàm x
