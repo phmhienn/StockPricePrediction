@@ -63,7 +63,7 @@ df1 = pd.DataFrame(df, columns=['Date', 'Close'])
 df1.index = df1.Date
 df1.drop('Date', axis=1, inplace=True)
 
-# Chia tập dữ liệu
+# Chia tập dữ liệu thành tập huấn luyện và tập kiểm tra
 data = df1.values
 train_data = data[:1500]
 test_data = data[1500:]
@@ -98,13 +98,13 @@ model.add(Dense(1))  # Output đầu ra 1 chiều
 model.compile(loss='mean_absolute_error', optimizer='adam')
 
 # Huấn luyện mô hình
-save_model = "save_model.hdf5"
+save_model = "save_model.keras"
 best_model = ModelCheckpoint(save_model, monitor='loss', verbose=2, save_best_only=True, mode='auto')
 model.fit(x_train, y_train, epochs=100, batch_size=50, verbose=2, callbacks=[best_model])
 
 # Dữ liệu train
 y_train = sc.inverse_transform(y_train.reshape(-1, 1))  # Giá thực
-final_model = load_model("save_model.hdf5")
+final_model = load_model("save_model.keras")
 y_train_predict = final_model.predict(x_train)  # Dự đoán giá đóng cửa trên tập đã train
 y_train_predict = sc.inverse_transform(y_train_predict)  # Giá dự đoán
 
