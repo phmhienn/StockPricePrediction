@@ -1,213 +1,185 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import MinMaxScaler
-from keras.callbacks import ModelCheckpoint, EarlyStopping
-from tensorflow.keras.models import load_model
-from tensorflow.keras.layers import Input, LSTM, Dropout, Dense
-from tensorflow.keras.models import Model
+import pandas as pd  # Đọc dữ liệu
+import numpy as np  # Xử lý dữ liệu
+import matplotlib.pyplot as plt  # Vẽ biểu đồ
+from sklearn.preprocessing import MinMaxScaler  # Chuẩn hóa dữ liệu
+from keras.callbacks import ModelCheckpoint  # Lưu lại huấn luyện tốt nhất
+from tensorflow.keras.models import load_model  # Tải mô hình
 
-# Đọc dữ liệu từ file csv local
-try:
-    # Đọc cả dữ liệu train và test
-    train_df = pd.read_csv('ACB.VN_train.csv')
-    test_df = pd.read_csv('ACB.VN_test.csv')
-    print("Đã đọc dữ liệu thành công!")
-    
-    # Gộp dữ liệu
-    df = pd.concat([train_df, test_df])
-except FileNotFoundError:
-    print("Không tìm thấy file dữ liệu! Vui lòng kiểm tra lại đường dẫn.")
-    exit()
+# Các lớp để xây dựng mô hình
+from keras.models import Sequential  # Đầu vào
+from keras.layers import LSTM  # Học phụ thuộc
+from keras.layers import Dropout  # Tránh học tủ
+from keras.layers import Dense  # Đầu ra
+
+# Kiểm tra độ chính xác của mô hình
+from sklearn.metrics import r2_score  # Đo mức độ phù hợp
+from sklearn.metrics import mean_absolute_error  # Đo sai số tuyệt đối trung bình
+from sklearn.metrics import mean_absolute_percentage_error  # Đo % sai số tuyệt đối trung bình
+
+# Đọc dữ liệu từ file CSV
+df = pd.read_csv('ACB.VN_yahoo_history.csv')
+
+# Hiển thị lại DataFrame sau khi xóa
+print(df)
 
 # Định dạng cấu trúc thời gian
-df["Date"] = pd.to_datetime(df.Date)
-df = df.sort_values(by='Date')  # Sắp xếp theo thời gian
+df["Date"] = pd.to_datetime(df["Date"], format="%Y-%m-%d")
 
-# Tạo DataFrame cho dữ liệu huấn luyện
-df1 = pd.DataFrame(df, columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+# Kích thước dữ liệu
+print(df.shape)
+
+# Dữ liệu 5 dòng đầu
+print(df.head())
+
+# Mô tả bộ dữ liệu
+print(df.describe())
+
+from matplotlib.dates import YearLocator, DateFormatter, MonthLocator
+
+# Chuyển đổi cột "Date" sang dạng datetime
+df = df.sort_values(by='Date')
+
+# Tạo đồ thị giá đóng cửa qua các năm
+plt.figure(figsize=(10, 5))
+plt.plot(df['Date'], df['Close'], label='Giá đóng cửa', color='red')
+plt.xlabel('Năm')
+plt.ylabel('Giá đóng cửa')
+plt.title('Biểu đồ giá đóng cửa của ACB qua các năm')
+plt.legend(loc='best')
+
+# Định dạng đồ thị hiển thị các ngày tháng theo năm-tháng
+years = YearLocator()
+yearsFmt = DateFormatter('%Y')
+months = MonthLocator()  # Thêm dòng này để khai báo MonthLocator
+plt.gca().xaxis.set_major_locator(years)
+plt.gca().xaxis.set_major_formatter(yearsFmt)
+plt.gca().xaxis.set_minor_locator(months)
+
+plt.tight_layout()
+plt.show()
+
+# Chuẩn bị dữ liệu để huấn luyện mô hình
+df1 = pd.DataFrame(df, columns=['Date', 'Close'])
 df1.index = df1.Date
 df1.drop('Date', axis=1, inplace=True)
 
 # Chia tập dữ liệu
 data = df1.values
-train_size = int(len(train_df))
-train_data = data[:train_size]
-test_data = data[train_size:]
+train_data = data[:1500]
+test_data = data[1500:]
 
-# Chuẩn hóa tất cả các features
-sc = MinMaxScaler(feature_range=(0,1))
-scaled_data = sc.fit_transform(df1)
+# Chuẩn hóa dữ liệu
+sc = MinMaxScaler(feature_range=(0, 1))
+sc_train = sc.fit_transform(data)
 
-# Tạo chuỗi dữ liệu cho huấn luyện
-lookback = 50
+# Tạo vòng lặp các giá trị
 x_train, y_train = [], []
-for i in range(lookback, len(train_data)):
-    x_train.append(scaled_data[i-lookback:i, 0])
-    y_train.append(scaled_data[i, 0])
+for i in range(50, len(train_data)):
+    x_train.append(sc_train[i-50:i, 0])  # Lấy 50 giá đóng cửa liên tục
+    y_train.append(sc_train[i, 0])  # Lấy ra giá đóng cửa ngày hôm sau
 
+# Xếp dữ liệu thành 1 mảng 2 chiều
 x_train = np.array(x_train)
 y_train = np.array(y_train)
+
+# Xếp lại dữ liệu thành mảng 1 chiều
 x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
-y_train = np.reshape(y_train, (y_train.shape[0], 1))
 
 # Xây dựng mô hình
-def build_model(lookback):
-    inputs = Input(shape=(lookback, 1))
-    x = LSTM(128, return_sequences=True)(inputs)
-    x = Dropout(0.2)(x)
-    x = LSTM(64, return_sequences=True)(x)
-    x = Dropout(0.2)(x)
-    x = LSTM(32)(x)
-    x = Dropout(0.2)(x)
-    x = Dense(16, activation='relu')(x)
-    outputs = Dense(1)(x)
-    
-    model = Model(inputs=inputs, outputs=outputs)
-    model.compile(
-        optimizer='adam',
-        loss='huber',
-        metrics=['mae', 'mse']
-    )
-    return model
+model = Sequential()  # Tạo lớp mạng cho dữ liệu đầu vào
 
-# Tạo mô hình
-model = build_model(lookback)
+# 2 lớp LSTM
+model.add(LSTM(units=128, input_shape=(x_train.shape[1], 1), return_sequences=True))
+model.add(LSTM(units=64))
+model.add(Dropout(0.5))  # Loại bỏ 1 số đơn vị tránh học tủ (overfitting)
+model.add(Dense(1))  # Output đầu ra 1 chiều
 
-# Lưu mô hình tốt nhất
-save_model = "best_model_acb.keras"
-best_model = ModelCheckpoint(
-    save_model, 
-    monitor='loss',
-    verbose=1,
-    save_best_only=True,
-    mode='auto'
-)
-
-# Thêm early stopping
-early_stopping = EarlyStopping(
-    monitor='val_loss',
-    patience=10,
-    restore_best_weights=True
-)
+# Đo sai số tuyệt đối trung bình có sử dụng trình tối ưu hóa adam
+model.compile(loss='mean_absolute_error', optimizer='adam')
 
 # Huấn luyện mô hình
-history = model.fit(
-    x_train, 
-    y_train,
-    epochs=100,
-    batch_size=32,
-    validation_split=0.2,
-    callbacks=[early_stopping, best_model],
-    verbose=1
-)
+save_model = "save_model.hdf5"
+best_model = ModelCheckpoint(save_model, monitor='loss', verbose=2, save_best_only=True, mode='auto')
+model.fit(x_train, y_train, epochs=100, batch_size=50, verbose=2, callbacks=[best_model])
 
-# Dự đoán
-final_model = load_model("best_model_acb.keras")
+# Dữ liệu train
+y_train = sc.inverse_transform(y_train.reshape(-1, 1))  # Giá thực
+final_model = load_model("save_model.hdf5")
+y_train_predict = final_model.predict(x_train)  # Dự đoán giá đóng cửa trên tập đã train
+y_train_predict = sc.inverse_transform(y_train_predict)  # Giá dự đoán
 
-def predict_future_prices(model, last_sequence, sc, n_days=30):
-    """
-    Dự đoán giá với kiểm soát biến động
-    """
-    future_prices = []
-    current_sequence = last_sequence[-lookback:].copy()
-    last_price = current_sequence[-1]  # Giá của ngày cuối cùng
-    
-    for _ in range(n_days):
-        # Chuẩn bị dữ liệu
-        current_sequence_scaled = current_sequence.reshape(-1, 1)
-        current_sequence_scaled = np.repeat(current_sequence_scaled, 5, axis=1)
-        current_sequence_scaled = sc.transform(current_sequence_scaled)[:, 0]
-        X = current_sequence_scaled.reshape(1, lookback, 1)
-        
-        # Dự đoán
-        next_day = model.predict(X, verbose=0)
-        next_day_array = np.array([[next_day[0, 0]]*5])
-        next_day_price = sc.inverse_transform(next_day_array)[0, 0]
-        
-        # Giới hạn biến động giá (tối đa 2% mỗi ngày)
-        max_daily_change = 0.02  # 2%
-        min_price = last_price * (1 - max_daily_change)
-        max_price = last_price * (1 + max_daily_change)
-        next_day_price = np.clip(next_day_price, min_price, max_price)
-        
-        # Thêm kiểm tra xu hướng
-        if len(future_prices) >= 5:
-            # Kiểm tra xu hướng 5 ngày gần nhất
-            recent_trend = (next_day_price - future_prices[-5]) / future_prices[-5]
-            if abs(recent_trend) > 0.1:  # Nếu xu hướng > 10%
-                # Điều chỉnh giá về mức hợp lý hơn
-                next_day_price = future_prices[-1] * (1 + np.sign(recent_trend) * 0.01)
-        
-        future_prices.append(next_day_price)
-        current_sequence = np.append(current_sequence[1:], next_day_price)
-        last_price = next_day_price
-    
-    return future_prices
+# Xử lý dữ liệu test
+test = df1[len(train_data)-50:].values
+test = test.reshape(-1, 1)
+sc_test = sc.transform(test)
 
-# Lấy chuỗi dữ liệu cuối cùng để dự đoán
-last_sequence = df1['Close'].values[-lookback:]  # Chỉ lấy lookback ngày cuối
+x_test = []
+for i in range(50, test.shape[0]):
+    x_test.append(sc_test[i-50:i, 0])
+x_test = np.array(x_test)
+x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
 
-# Dự đoán 30 ngày tiếp theo
-future_days = 30
-future_prices = predict_future_prices(final_model, last_sequence, sc, future_days)
+# Dữ liệu test
+y_test = data[1500:]  # Giá thực
+y_test_predict = final_model.predict(x_test)
+y_test_predict = sc.inverse_transform(y_test_predict)  # Giá dự đoán
 
-# Tạo ngày cho dự đoán
-last_date = df['Date'].iloc[-1]
-future_dates = pd.date_range(
-    start=last_date + pd.Timedelta(days=1), 
-    periods=future_days, 
-    freq='B'
-)
+# Lập biểu đồ so sánh
+train_data1 = df1[50:1500]
+test_data1 = df1[1500:]
 
-# Tạo DataFrame kết quả
-results = pd.DataFrame({
-    'Ngày': future_dates,
-    'Giá dự đoán': future_prices
-})
-
-# Vẽ biểu đồ
-plt.figure(figsize=(15, 7))
-plt.plot(df1.index[-30:], df1['Close'].values[-30:], 'b-', label='Giá lịch sử')
-plt.plot(future_dates, future_prices, 'r--', label='Giá dự đoán')
-plt.title('Dự đoán giá cổ phiếu ACB')
-plt.xlabel('Thời gian')
-plt.ylabel('Giá (VNĐ)')
-plt.legend()
-plt.grid(True)
-plt.xticks(rotation=45)
-plt.tight_layout()
+plt.figure(figsize=(24, 8))
+plt.plot(df1, label='Giá thực tế', color='red')  # Đường giá thực
+train_data1['Dự đoán'] = y_train_predict  # Thêm dữ liệu
+plt.plot(train_data1['Dự đoán'], label='Giá dự đoán train', color='green')  # Đường giá dự báo train
+test_data1['Dự đoán'] = y_test_predict  # Thêm dữ liệu
+plt.plot(test_data1['Dự đoán'], label='Giá dự đoán test', color='blue')  # Đường giá dự báo test
+plt.title('So sánh giá dự báo và giá thực tế')  # Đặt tên biểu đồ
+plt.xlabel('Thời gian')  # Đặt tên hàm x
+plt.ylabel('Giá đóng cửa (VNĐ)')  # Đặt tên hàm y
+plt.legend()  # Chú thích
 plt.show()
 
-# In kết quả dự đoán
-print("\nDự đoán giá cho 30 ngày tới:")
-print(results.to_string(index=False))
+# Đánh giá mô hình trên tập train
+print('Độ phù hợp tập train:', r2_score(y_train, y_train_predict))
+print('Sai số tuyệt đối trung bình trên tập train (VNĐ):', mean_absolute_error(y_train, y_train_predict))
+print('Phần trăm sai số tuyệt đối trung bình tập train:', mean_absolute_percentage_error(y_train, y_train_predict))
 
-# Lưu kết quả
-results.to_csv('ket_qua_du_doan_ACB.csv', index=False, encoding='utf-8-sig')
-print("\nĐã lưu kết quả vào file 'ket_qua_du_doan_ACB.csv'")
+# Đánh giá mô hình trên tập test
+print('Độ phù hợp tập test:', r2_score(y_test, y_test_predict))
+print('Sai số tuyệt đối trung bình trên tập test (VNĐ):', mean_absolute_error(y_test, y_test_predict))
+print('Phần trăm sai số tuyệt đối trung bình tập test:', mean_absolute_percentage_error(y_test, y_test_predict))
 
-def calculate_confidence_interval(predictions, confidence=0.95):
-    """
-    Tính toán khoảng tin cậy cho dự đoán
-    """
-    mean = np.mean(predictions)
-    std = np.std(predictions)
-    z_score = 1.96  # cho confidence level 95%
-    margin = z_score * (std / np.sqrt(len(predictions)))
-    return mean - margin, mean + margin
+# Lấy ngày kế tiếp sau ngày cuối cùng trong tập dữ liệu để dự đoán
+next_date = df['Date'].iloc[-1] + pd.Timedelta(days=1)
 
-# Thêm hàm đánh giá độ tin cậy
-def add_confidence_intervals(results_df, confidence=0.95):
-    """
-    Thêm khoảng tin cậy cho dự đoán
-    """
-    z_score = 1.96  # 95% confidence interval
-    std = results_df['Giá dự đoán'].std()
-    margin = z_score * (std / np.sqrt(len(results_df)))
-    
-    results_df['Khoảng dưới'] = results_df['Giá dự đoán'] - margin
-    results_df['Khoảng trên'] = results_df['Giá dự đoán'] + margin
-    return results_df
+# Chuẩn hóa giá trị của ngày cuối cùng
+x_next = np.array([sc_train[-50:, 0]])  # Lấy 50 giá đóng cửa gần nhất
+x_next = np.reshape(x_next, (x_next.shape[0], x_next.shape[1], 1))
+y_next_predict = final_model.predict(x_next)
+y_next_predict = sc.inverse_transform(y_next_predict)
 
+# Thêm dữ liệu dự đoán của ngày kế tiếp vào DataFrame
+df_next = pd.DataFrame({'Date': [next_date], 'Close': [y_next_predict[0][0]]})
+df1 = pd.concat([df1, df_next])
 
+# Vẽ biểu đồ mới với dự đoán cho ngày kế tiếp
+plt.figure(figsize=(15, 5))
+plt.plot(df1.index, df1['Close'], label='Giá thực tế', color='red')
+plt.plot(train_data1.index, train_data1['Dự đoán'], label='Giá dự đoán train', color='green')
+plt.plot(test_data1.index, test_data1['Dự đoán'], label='Giá dự đoán test', color='blue')
+plt.scatter([next_date], [y_next_predict[0][0]], color='orange', label='Dự đoán ngày kế tiếp')
+plt.xlabel('Thời gian')
+plt.ylabel('Giá đóng cửa (VNĐ)')
+plt.title('So sánh giá dự báo và giá thực tế')
+plt.legend()
+plt.show()
+
+# Lấy giá trị của ngày cuối cùng trong tập dữ liệu
+actual_closing_price = df['Close'].iloc[-1]
+
+# Tạo DataFrame so sánh giá dự đoán với giá ngày cuối trong tập dữ liệu
+comparison_df = pd.DataFrame({'Date': [next_date], 'Giá dự đoán': [y_next_predict[0][0]], 'Giá ngày trước': [actual_closing_price]})
+
+# In ra bảng so sánh
+print(comparison_df)
