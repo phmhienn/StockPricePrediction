@@ -7,14 +7,11 @@ from tensorflow.keras.models import load_model  # Tải mô hình
 
 # Các lớp để xây dựng mô hình
 from keras.models import Sequential  # Đầu vào
-from keras.layers import LSTM  # Học phụ thuộc
-from keras.layers import Dropout  # Tránh học tủ
-from keras.layers import Dense  # Đầu ra
+from keras.layers import LSTM, Dropout, Dense  # Học phụ thuộc, tránh học tủ, đầu ra
+from keras.layers import Input  # Định nghĩa đầu vào
 
 # Kiểm tra độ chính xác của mô hình
-from sklearn.metrics import r2_score  # Đo mức độ phù hợp
-from sklearn.metrics import mean_absolute_error  # Đo sai số tuyệt đối trung bình
-from sklearn.metrics import mean_absolute_percentage_error  # Đo % sai số tuyệt đối trung bình
+from sklearn.metrics import r2_score, mean_absolute_error, mean_absolute_percentage_error  # Đo mức độ phù hợp, sai số tuyệt đối trung bình, % sai số tuyệt đối trung bình
 
 # Đọc dữ liệu từ file CSV
 df = pd.read_csv('ACB.VN_yahoo_history.csv')
@@ -65,8 +62,8 @@ df1.drop('Date', axis=1, inplace=True)
 
 # Chia tập dữ liệu thành tập huấn luyện và tập kiểm tra
 data = df1.values
-train_data = data[:1700]  # Tăng kích thước tập huấn luyện
-test_data = data[1700:]
+train_data = data[:1500]
+test_data = data[1500:]
 
 # Chuẩn hóa dữ liệu
 sc = MinMaxScaler(feature_range=(0, 1))
@@ -88,11 +85,13 @@ x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 # Xây dựng mô hình
 model = Sequential()  # Tạo lớp mạng cho dữ liệu đầu vào
 
+# Định nghĩa lớp đầu vào
+model.add(Input(shape=(x_train.shape[1], 1)))
+
 # 2 lớp LSTM
-model.add(LSTM(units=128, input_shape=(x_train.shape[1], 1), return_sequences=True))
-model.add(Dropout(0.6))  # Tăng giá trị Dropout để giảm overfitting
+model.add(LSTM(units=128, return_sequences=True))
 model.add(LSTM(units=64))
-model.add(Dropout(0.6))  # Tăng giá trị Dropout thêm
+model.add(Dropout(0.5))  # Loại bỏ 1 số đơn vị tránh học tủ (overfitting)
 model.add(Dense(1))  # Output đầu ra 1 chiều
 
 # Đo sai số tuyệt đối trung bình có sử dụng trình tối ưu hóa adam
@@ -101,16 +100,13 @@ model.compile(loss='mean_absolute_error', optimizer='adam')
 # Huấn luyện mô hình
 save_model = "save_model.keras"
 best_model = ModelCheckpoint(save_model, monitor='loss', verbose=2, save_best_only=True, mode='auto')
-model.fit(x_train, y_train, epochs=100, batch_size=50, verbose=2, callbacks=[best_model])
+model.fit(x_train, y_train, epochs=110, batch_size=128, verbose=2, callbacks=[best_model])
 
-# Thêm dự đoán vào tập dữ liệu huấn luyện
+# Dữ liệu train
+y_train = sc.inverse_transform(y_train.reshape(-1, 1))  # Giá thực
 final_model = load_model("save_model.keras")
 y_train_predict = final_model.predict(x_train)  # Dự đoán giá đóng cửa trên tập đã train
 y_train_predict = sc.inverse_transform(y_train_predict)  # Giá dự đoán
-y_train = sc.inverse_transform(y_train.reshape(-1, 1))  # Giá thực
-
-train_data1 = df1[50:1700]  # Cập nhật kích thước của train_data1
-train_data1['Dự đoán'] = y_train_predict  # Thêm dữ liệu dự đoán vào tập huấn luyện
 
 # Xử lý dữ liệu test
 test = df1[len(train_data)-50:].values
@@ -124,12 +120,16 @@ x_test = np.array(x_test)
 x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
 
 # Dữ liệu test
-y_test = data[1700:]  # Giá thực
+y_test = data[1500:]  # Giá thực
 y_test_predict = final_model.predict(x_test)
 y_test_predict = sc.inverse_transform(y_test_predict)  # Giá dự đoán
 
-test_data1 = df1[1700:]
-test_data1['Dự đoán'] = y_test_predict  # Thêm dữ liệu dự đoán vào tập kiểm tra
+# Lập biểu đồ so sánh
+train_data1 = df1[50:1500].copy()
+test_data1 = df1[1500:].copy()
+
+train_data1.loc[:, 'Dự đoán'] = y_train_predict  # Thêm dữ liệu
+test_data1.loc[:, 'Dự đoán'] = y_test_predict  # Thêm dữ liệu
 
 plt.figure(figsize=(24, 8))
 plt.plot(df1, label='Giá thực tế', color='red')  # Đường giá thực
