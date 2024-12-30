@@ -47,7 +47,7 @@ plt.legend(loc='best')
 # Định dạng đồ thị hiển thị các ngày tháng theo năm-tháng
 years = YearLocator()
 yearsFmt = DateFormatter('%Y')
-months = MonthLocator()  # Thêm dòng này để khai báo MonthLocator
+months = MonthLocator()
 plt.gca().xaxis.set_major_locator(years)
 plt.gca().xaxis.set_major_formatter(yearsFmt)
 plt.gca().xaxis.set_minor_locator(months)
@@ -60,10 +60,11 @@ df1 = pd.DataFrame(df, columns=['Date', 'Close'])
 df1.index = df1.Date
 df1.drop('Date', axis=1, inplace=True)
 
-# Chia tập dữ liệu thành tập huấn luyện và tập kiểm tra
+# Chia tập dữ liệu thành 80% train và 20% test
 data = df1.values
-train_data = data[:1500]
-test_data = data[1500:]
+train_size = int(len(data) * 0.8)
+train_data = data[:train_size]
+test_data = data[train_size:]
 
 # Chuẩn hóa dữ liệu
 sc = MinMaxScaler(feature_range=(0, 1))
@@ -120,13 +121,13 @@ x_test = np.array(x_test)
 x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
 
 # Dữ liệu test
-y_test = data[1500:]  # Giá thực
+y_test = data[train_size:]  # Giá thực
 y_test_predict = final_model.predict(x_test)
 y_test_predict = sc.inverse_transform(y_test_predict)  # Giá dự đoán
 
 # Lập biểu đồ so sánh
-train_data1 = df1[50:1500].copy()
-test_data1 = df1[1500:].copy()
+train_data1 = df1[50:train_size].copy()
+test_data1 = df1[train_size:].copy()
 
 train_data1.loc[:, 'Dự đoán'] = y_train_predict  # Thêm dữ liệu
 test_data1.loc[:, 'Dự đoán'] = y_test_predict  # Thêm dữ liệu
