@@ -21,7 +21,7 @@ print(df)
 
 # Định dạng cấu trúc thời gian
 df["Date"] = pd.to_datetime(df["Date"], format="%Y-%m-%d")
-
+df = df.fillna(df.mean())
 # Kích thước dữ liệu
 print(df.shape)
 
@@ -89,8 +89,8 @@ model = Sequential()  # Tạo lớp mạng cho dữ liệu đầu vào
 model.add(Input(shape=(x_train.shape[1], 1)))
 
 # 2 lớp LSTM
-model.add(LSTM(units=128, return_sequences=True))
-model.add(LSTM(units=64))
+model.add(LSTM(units=128, return_sequences=False))  # Học phụ thuộc dài hạn
+# model.add(LSTM(units=64))
 model.add(Dropout(0.5))  # Loại bỏ 1 số đơn vị tránh học tủ (overfitting)
 model.add(Dense(1))  # Output đầu ra 1 chiều
 
