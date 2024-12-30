@@ -1,7 +1,7 @@
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
-
+import os
 def get_stock_history(symbol, start_date, end_date):
     try:
         stock = yf.Ticker(symbol)
@@ -46,9 +46,10 @@ if __name__ == "__main__":
     end_date = (today + timedelta(days=1)).strftime('%Y-%m-%d')
     # Lấy dữ liệu
     df = get_stock_history(symbol, start_date, end_date)
-    
+    output_folder = "stock_data"
 if df is not None:
     print("\nData retrieved:")
     print(df.head())
-    df.to_csv(f"{symbol}_yahoo_history.csv", index=False)
-    print(f"\nSaved to {symbol}_yahoo_history.csv")
+    output_path = os.path.join(output_folder, f"{symbol}_yahoo_history.csv")
+    df.to_csv(output_path, index=False)
+    print(f"\nSaved to {output_path}")

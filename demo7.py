@@ -14,7 +14,7 @@ from keras.layers import Input  # Định nghĩa đầu vào
 from sklearn.metrics import r2_score, mean_absolute_error, mean_absolute_percentage_error  # Đo mức độ phù hợp, sai số tuyệt đối trung bình, % sai số tuyệt đối trung bình
 
 # Đọc dữ liệu từ file CSV
-df = pd.read_csv('ACB.VN_yahoo_history.csv')
+df = pd.read_csv('stock_data/EIB.VN_yahoo_history.csv')
 
 # Hiển thị lại DataFrame sau khi xóa
 print(df)
@@ -89,7 +89,7 @@ model = Sequential()  # Tạo lớp mạng cho dữ liệu đầu vào
 # Định nghĩa lớp đầu vào
 model.add(Input(shape=(x_train.shape[1], 1)))
 
-# 2 lớp LSTM
+# 1 lớp LSTM
 model.add(LSTM(units=128, return_sequences=False))  # Học phụ thuộc dài hạn
 # model.add(LSTM(units=64))
 model.add(Dropout(0.5))  # Loại bỏ 1 số đơn vị tránh học tủ (overfitting)
