@@ -14,7 +14,7 @@ from keras.layers import Input  # Định nghĩa đầu vào
 from sklearn.metrics import r2_score, mean_absolute_error, mean_absolute_percentage_error  # Đo mức độ phù hợp, sai số tuyệt đối trung bình, % sai số tuyệt đối trung bình
 
 # Đọc dữ liệu từ file CSV
-df = pd.read_csv('stock_data/EIB.VN_yahoo_history.csv')
+df = pd.read_csv('stock_data/FPT.VN_yahoo_history.csv')
 
 # Hiển thị lại DataFrame sau khi xóa
 print(df)
